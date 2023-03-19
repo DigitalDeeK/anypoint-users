@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<flow name="getUsers" doc:id="a4b35f0c-3d9f-4890-8347-3db0fb8f1689" >
+		<http:listener doc:name="GET /users" doc:id="3c19d9f7-580a-47db-b715-6e0ce46f9c62" path="/users" config-ref="HTTP_Listener_config"/>
+		<set-variable value="#[message.attributes.queryParams.name]" doc:name="name" doc:id="b238ef16-56a4-404d-8eef-0a0bdbbf7165" variableName="name" />
+		<set-variable value="#[message.attributes.queryParams.pw as String]" doc:name="pw" doc:id="87bc06b4-458a-4d73-a718-36620d97e9fc" variableName="pw"/>
+		<set-variable value="#[message.attributes.queryParams.organizationId]" doc:name="organizationId" doc:id="039811d0-d3c7-40ff-bf15-166c7d7a8bb8" variableName="organizationId"/>
+		<ee:transform doc:name="Body for Req Bearer Token" doc:id="3d6d12ee-4f5e-4b87-bdfd-a589373d2f97" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+"username": vars.name,
+"password": vars.pw
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<http:request method="POST" doc:name="Bearer Token" doc:id="e7cdf30f-0dce-49be-bb86-aa9e893899b0" url="https://anypoint.mulesoft.com/accounts/login">
+		</http:request>
+		<logger level="INFO" doc:name="Logger" doc:id="754288c4-4173-433d-b1b6-5b84ea555443" message="#[payload]"/>
+		<set-variable value="#[payload.access_token]" doc:name="bearerToken" doc:id="711abb87-477c-45be-b3ce-ab0c6bdcdcf9" variableName="bearerToken"/>
+		<http:request method="GET" doc:name="User List" doc:id="9166d9d9-9da8-4904-9ae2-a6baebcca156" url="https://anypoint.mulesoft.com/apiplatform/repository/v2/organizations/{org.Id}/users/">
+			<http:headers><![CDATA[#[output application/java
+---
+{
+	"Authorization" : "bearer " ++ vars.bearertoken
+}]]]></http:headers>
+			<http:uri-params><![CDATA[#[output application/java
+---
+{
+	"org.Id" : vars.organizationId
+}]]]></http:uri-params>
+		</http:request>
+		<ee:transform doc:name="Java to CSV" doc:id="56cab9d7-2f1f-44c2-810b-f91ddf820970">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/csv
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="e2d7a108-83fe-4e84-b8eb-099177683e6d" message="#[payload]" />
+		<error-handler >
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="7348d027-86c4-4165-8ace-3ec25c83e90a" type="ANY">
+				<ee:transform doc:name="Error Description" doc:id="2e57d53a-5324-4caa-a500-6718afdf9419" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"Message": "Error Occurred: " ++ error.description as String
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<logger level="INFO" doc:name="Logger" doc:id="69364c97-9fa7-4838-b2f4-0d9664992166" message="#[payload]"/>
+			</on-error-continue>
+		</error-handler>
+	</flow>
+</mule>
